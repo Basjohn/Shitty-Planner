@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTextEdit, QScrollArea,
     QListWidget, QListWidgetItem, QLineEdit, QFrame, QFileDialog, QMessageBox, QSizeGrip, QSizePolicy
 )
-from PyQt6.QtGui import QIcon, QAction, QFont, QPainter, QColor, QPixmap
+from PyQt6.QtGui import QIcon, QAction, QFont, QPainter, QColor, QPixmap, QTextCursor, QTextCharFormat, QKeySequence
 from PyQt6.QtCore import Qt, QSize, QRect, QTimer, QDateTime
 
 APP_NAME = "Shitty Planner"
@@ -125,6 +125,30 @@ class CategoryTaskDB:
     def save(self):
         self.conn.commit()
 
+class RichTextEdit(QTextEdit):
+    def keyPressEvent(self, event):
+        if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            if event.key() == Qt.Key.Key_B:
+                self.toggle_format('bold')
+                return
+            elif event.key() == Qt.Key.Key_U:
+                self.toggle_format('underline')
+                return
+        super().keyPressEvent(event)
+
+    def toggle_format(self, fmt_type):
+        cursor = self.textCursor()
+        if not cursor.hasSelection():
+            return
+        fmt = QTextCharFormat()
+        if fmt_type == 'bold':
+            current = cursor.charFormat().fontWeight() == QFont.Weight.Bold
+            fmt.setFontWeight(QFont.Weight.Normal if current else QFont.Weight.Bold)
+        elif fmt_type == 'underline':
+            current = cursor.charFormat().fontUnderline()
+            fmt.setFontUnderline(not current)
+        cursor.mergeCharFormat(fmt)
+
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -149,6 +173,8 @@ class MainWindow(QWidget):
         self.save_content_timer.timeout.connect(self.save_task_content_actual)
         self.init_ui()
         self.load_categories()
+        # On startup, show right panel as blue and hide task editor
+        self.show_blank_right_panel()
 
     def button_style(self):
         return (
@@ -186,6 +212,9 @@ class MainWindow(QWidget):
         cat_btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         cat_btn.customContextMenuRequested.connect(lambda _, cid=cat_id, btn=cat_btn: self.edit_category_name(cid, btn))
         cat_btn.mouseDoubleClickEvent = lambda e, cid=cat_id, btn=cat_btn: self.edit_category_name(cid, btn)
+        # Tooltip for double click
+        cat_btn.setToolTip("Double Click To Edit!")
+        cat_btn.setToolTipDuration(2000)
         cat_layout.addWidget(cat_btn)
         # Tasks
         tasks = self.db.get_tasks(cat_id)
@@ -219,7 +248,7 @@ class MainWindow(QWidget):
         star_btn.setStyleSheet("border: none; background: transparent;")
         star_btn.clicked.connect(lambda _, tid=task_id, btn=star_btn: self.toggle_task_important(tid, btn))
         task_layout.addWidget(star_btn)
-        # Task button (always QPushButton)
+        # Task button
         task_btn = QPushButton(task_name)
         task_btn.setStyleSheet(self.button_style())
         task_btn.setFixedHeight(32)
@@ -229,6 +258,9 @@ class MainWindow(QWidget):
         task_btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         task_btn.customContextMenuRequested.connect(lambda _, tid=task_id, btn=task_btn: self.edit_task_name(tid, btn))
         task_btn.mouseDoubleClickEvent = lambda e, tid=task_id, btn=task_btn: self.edit_task_name(tid, btn)
+        # Tooltip for double click
+        task_btn.setToolTip("Double Click To Edit!")
+        task_btn.setToolTipDuration(2000)
         task_layout.addWidget(task_btn)
         parent_layout.addWidget(task_widget)
 
@@ -280,9 +312,7 @@ class MainWindow(QWidget):
         self.selected_category = cat_id
         self.selected_task = None
         self.show_category_delete_button(cat_id)
-        self.task_title.setText("")
-        self.task_content.setText("")
-        self.clear_task_editor()
+        self.show_blank_right_panel()
 
     def select_task(self, task_id):
         self.selected_task = task_id
@@ -297,11 +327,16 @@ class MainWindow(QWidget):
                     break
         self.task_title.setText(name or "TASK")
         content = self.db.get_task_content(task_id)
-        self.task_content.setText(content)
+        # Set as HTML
+        self.task_content.setHtml(content)
         last_modified = self.db.get_task_last_modified(task_id)
         self.show_task_last_modified(last_modified)
         self.add_task_delete_button()
         self.clear_category_delete_button()
+        # Show task editor and switch to white background
+        self.task_title.show()
+        self.task_content.show()
+        self.right_panel.setStyleSheet("background-color: #fff; border-radius: 14px; border: 3px solid #222;")
 
     def add_category(self):
         cat_id = self.db.add_category()
@@ -318,7 +353,8 @@ class MainWindow(QWidget):
 
     def save_task_content_actual(self):
         if self.selected_task:
-            content = self.task_content.toPlainText()
+            # Save as HTML
+            content = self.task_content.toHtml()
             self.db.update_task_content(self.selected_task, content)
             self.db.update_task_last_modified(self.selected_task, QDateTime.currentDateTime().toString("yyyy-MM-dd HH:mm"))
             self.show_task_last_modified(QDateTime.currentDateTime().toString("yyyy-MM-dd HH:mm"))
@@ -391,7 +427,7 @@ class MainWindow(QWidget):
         left_layout.addLayout(save_row)
         # Right panel
         self.right_panel = QFrame()
-        self.right_panel.setStyleSheet("background-color: #fff; border-radius: 14px; border: 3px solid #222;")
+        self.right_panel.setStyleSheet("background-color: #3A4352; border-radius: 14px; border: 3px solid #222;")
         right_layout = QVBoxLayout(self.right_panel)
         right_layout.setContentsMargins(20, 20, 20, 20)
         right_layout.setSpacing(12)
@@ -414,7 +450,8 @@ class MainWindow(QWidget):
         self.task_title = QLabel("TASK 1")
         self.task_title.setStyleSheet("font-size: 24px; font-weight: bold;")
         right_layout.addWidget(self.task_title)
-        self.task_content = QTextEdit()
+        # Replace QTextEdit with RichTextEdit for task content
+        self.task_content = RichTextEdit()
         self.task_content.setStyleSheet("font-size: 18px; background: #fff; border: 2px solid #222;")
         self.task_content.setMinimumHeight(350)
         self.task_content.textChanged.connect(self.save_task_content)
@@ -460,7 +497,9 @@ class MainWindow(QWidget):
 
     def clear_task_editor(self):
         self.task_title.setText("")
-        self.task_content.setText("")
+        self.task_content.setHtml("")
+        self.task_title.hide()
+        self.task_content.hide()
         if hasattr(self, 'last_modified_label') and self.last_modified_label:
             self.last_modified_label.hide()
         if hasattr(self, 'task_delete_btn') and self.task_delete_btn:
@@ -537,6 +576,15 @@ class MainWindow(QWidget):
         if res == QMessageBox.StandardButton.Yes:
             self.db.delete_category_and_tasks(cat_id)
             self.load_categories()
+
+    def show_blank_right_panel(self):
+        self.task_title.hide()
+        self.task_content.hide()
+        if hasattr(self, 'last_modified_label') and self.last_modified_label:
+            self.last_modified_label.hide()
+        if hasattr(self, 'task_delete_btn') and self.task_delete_btn:
+            self.task_delete_btn.hide()
+        self.right_panel.setStyleSheet("background-color: #3A4352; border-radius: 14px; border: 3px solid #222;")
 
     # ---- Frameless resizing support ----
     def mousePressEvent(self, event):
