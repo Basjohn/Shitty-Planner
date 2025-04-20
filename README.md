@@ -1,6 +1,6 @@
-# Shitty Life Planner
+# Shitty Planner
 
-A DPI-aware, scalable, and clean Python desktop application for basic life planning. Tasks are organized into categories, and all data is saved locally in a simple SQLite database. UI is inspired by a retro tabbed planner.
+A DPI-aware, scalable, and clean Python desktop application for basic planning. Tasks are organized into categories, and all data is saved locally in a simple SQLite database. UI is inspired by a retro tabbed planner. Useful for both planning tasks and notekeeping.
 
 ## Features
 - Editable categories and tasks
@@ -11,17 +11,6 @@ A DPI-aware, scalable, and clean Python desktop application for basic life plann
 - DPI-aware, resizable, and clean UI (PyQt6)
 - Transparent window borders (where supported)
 - Save button with silent popup
-
-## Getting Started
-
-1. Install requirements:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Run the application:
-   ```bash
-   python main.py
-   ```
 
 All data is stored in `database.db` in the same folder as the executable/script.
 
